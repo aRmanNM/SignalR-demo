@@ -59,6 +59,11 @@ namespace server.Hubs
             await Clients.Caller.ReceiveMessage(GetMessageToSend(message));
         }
 
+        public void SendToCallerWithException()
+        {
+            throw new Exception("This is a test exception.");
+        }
+
         public async Task SendToIndividual(string connectionId, string message)
         {
             await Clients.Client(connectionId).ReceiveMessage(GetMessageToSend(message));

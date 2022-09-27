@@ -1,5 +1,8 @@
-﻿using System.Reflection;
+﻿using MessagePack;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Spectre.Console;
 
 internal class Program
@@ -8,25 +11,41 @@ internal class Program
     {
         string url = "http://localhost:5218/samplehub";
 
-        var hubConnection = new HubConnectionBuilder().WithUrl(url).Build();
+        var hubConnection = new HubConnectionBuilder()
+            .WithUrl(url, HttpTransportType.WebSockets, options =>
+            {
+                // client options here
+            })
+            .ConfigureLogging(logging =>
+            {
+                logging.SetMinimumLevel(LogLevel.Information);
+                logging.AddConsole();
+            })
+            .AddMessagePackProtocol(options =>
+            {
+                options.SerializerOptions = MessagePackSerializerOptions.Standard
+                    .WithSecurity(MessagePackSecurity.UntrustedData)
+                    .WithCompression(MessagePackCompression.Lz4Block)
+                    .WithAllowAssemblyVersionMismatch(true)
+                    .WithOldSpec()
+                    .WithOmitAssemblyVersion(true);
+            })
+            .Build();
 
         hubConnection.On<string>("ReceiveMessage",
             message => Console.WriteLine("SampleHub message is: {0}", message));
-
 
         try
         {
             await hubConnection.StartAsync();
 
-            var running = true;
-
-            while (running)
+            while (true)
             {
                 var message = string.Empty;
                 var groupName = string.Empty;
 
                 AnsiConsole.Write(
-                    new FigletText(GetAppName())
+                    new FigletText(args[0])
                         .LeftAligned());
 
                 Console.WriteLine("Specify action:");
@@ -37,11 +56,15 @@ internal class Program
                 Console.WriteLine("4 - send to a group");
                 Console.WriteLine("5 - add user to a group");
                 Console.WriteLine("6 - remove user from a group");
+                Console.WriteLine("7 - send to self (throw exception)");
                 Console.WriteLine("exit - Exit the program");
 
                 var action = Console.ReadLine();
 
-                if (action != "5" && action != "6")
+                if (action == "exit")
+                    break;
+
+                if (action != "5" && action != "6" && action != "7")
                 {
                     Console.WriteLine("Please specify the message:");
                     message = Console.ReadLine();
@@ -49,7 +72,7 @@ internal class Program
 
                 if (action == "4" || action == "5" || action == "6")
                 {
-                    Console.WriteLine("Please specify the message:");
+                    Console.WriteLine("Please specify the group name:");
                     groupName = Console.ReadLine();
                 }
 
@@ -70,16 +93,17 @@ internal class Program
                         await hubConnection.SendAsync("SendToIndividual", connectionId, message);
                         break;
                     case "4":
-                        hubConnection.SendAsync("SendToGroup", groupName, message).Wait();
+                        await hubConnection.SendAsync("SendToGroup", groupName, message);
                         break;
                     case "5":
-                        hubConnection.SendAsync("AddUserToGroup", groupName).Wait();
+                        await hubConnection.SendAsync("AddUserToGroup", groupName);
                         break;
                     case "6":
-                        hubConnection.SendAsync("RemoveUserFromGroup", groupName).Wait();
+                        await hubConnection.SendAsync("RemoveUserFromGroup", groupName);
                         break;
-                    case "exit":
-                        running = false;
+                    case "7":
+                        // server exceptions didn't received on client using SendAsync method!
+                        await hubConnection.InvokeAsync("SendToCallerWithException");
                         break;
                     default:
                         Console.WriteLine("Invalid action specified");
@@ -95,10 +119,5 @@ internal class Program
             return;
         }
 
-    }
-
-    private static string GetAppName()
-    {
-        return Assembly.GetCallingAssembly().GetName().Name ?? string.Empty;
     }
 }
