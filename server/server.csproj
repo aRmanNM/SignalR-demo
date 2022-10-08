@@ -8,5 +8,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3"/>
     <PackageReference Include="NetTopologySuite" Version="2.5.0"/>
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="6.0.9"/>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="6.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="6.0.9" />
+    <PackageReference Include="IdentityModel" Version="6.0.0" />
   </ItemGroup>
 </Project>

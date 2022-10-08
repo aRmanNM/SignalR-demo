@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using server.Interfaces;
 
@@ -59,6 +63,18 @@ namespace server.Hubs
             await Clients.Caller.ReceiveMessage(GetMessageToSend(message));
         }
 
+        [Authorize]
+        public async Task SendToCallerIfAuthenticated(string message)
+        {
+            await Clients.Caller.ReceiveMessage(GetMessageToSendWithUserInfo(message));
+        }
+
+        [Authorize("OnlyAdmin")]
+        public async Task SendToCallerIfAuthenticatedWithAdminRole(string message)
+        {
+            await Clients.Caller.ReceiveMessage(GetMessageToSendWithUserInfo(message));
+        }
+
         public void SendToCallerWithException()
         {
             throw new Exception("This is a test exception.");
@@ -101,6 +117,11 @@ namespace server.Hubs
         private string GetMessageToSend(string originalMessage)
         {
             return $"Connection id: {Context.ConnectionId}. Message: {originalMessage}";
+        }
+
+        private string GetMessageToSendWithUserInfo(string originalMessage)
+        {
+            return $"Connection id: {Context.ConnectionId}. Message: {originalMessage}. Name: {Context.User?.FindFirst("name")?.Value}. Role: {Context.User?.FindFirst("role")?.Value}";
         }
     }
 }

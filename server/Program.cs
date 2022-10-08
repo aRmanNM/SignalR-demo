@@ -1,6 +1,14 @@
 using MessagePack;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using server.Hubs;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using IdentityModel;
+using IdentityModel.Client;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +22,7 @@ builder.Services.AddSignalR(hubOptions =>
     hubOptions.HandshakeTimeout = TimeSpan.FromSeconds(15);
     hubOptions.MaximumParallelInvocationsPerClient = 2;
 
-    hubOptions.EnableDetailedErrors = false; // only use in development environment
+    hubOptions.EnableDetailedErrors = true; // only use in development environment
 
     if (hubOptions?.SupportedProtocols is not null)
     {
@@ -39,6 +47,81 @@ builder.Services.AddSignalR(hubOptions =>
         .WithOmitAssemblyVersion(true);
 });
 
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = "oidc";
+})
+.AddOpenIdConnect("oidc", options =>
+{
+    options.Authority = "http://localhost:5000";
+    options.ClientId = "signalR-server";
+    options.ClientSecret = "secret";
+    options.ResponseType = "token";
+    options.CallbackPath = "/signin-oidc";
+    options.SaveTokens = true;
+    options.RequireHttpsMetadata = false; // only for development
+
+    options.Scope.Add("role"); //Add this
+})
+.AddJwtBearer(options =>
+{
+    options.Authority = "http://localhost:5000";
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateAudience = false
+    };
+
+    options.RequireHttpsMetadata = false; // only for development
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var path = context.HttpContext.Request.Path;
+            if (path.StartsWithSegments("/samplehub"))
+            {
+                // attempt to get a token from a query string used by websocket
+                var accessToken = context.Request.Query["access_token"];
+
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    accessToken = context.Request
+                        .Headers["Authorization"]
+                        .ToString()
+                        .Replace("Bearer ", "");
+                }
+
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
+});
+
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("OnlyAdmin", policy =>
+    {
+        policy.RequireClaim(JwtClaimTypes.Role, new string[] { "Admin" });
+    });
+});
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAnyGet",
+        builder => builder.AllowAnyOrigin()
+            .WithMethods("GET")
+            .AllowAnyHeader());
+
+    options.AddPolicy("AllowSampleDomains",
+        builder => builder.WithOrigins("https://something.com", "https://something-else.com")
+            .AllowAnyMethod()
+            .AllowAnyHeader());
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -51,6 +134,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseRouting();
 
+app.UseCors("AllowAnyGet")
+    .UseCors("AllowSampleDomains");
+
+app.UseAuthentication();
 app.UseAuthorization();
 
 // app.MapControllers();
@@ -60,7 +147,8 @@ app.UseEndpoints(endpoints =>
     endpoints.MapHub<SampleHub>("/samplehub", options =>
     {
         options.Transports =
-            HttpTransportType.WebSockets | HttpTransportType.LongPolling;
+            HttpTransportType.WebSockets;
+        // HttpTransportType.WebSockets | HttpTransportType.LongPolling;
 
         options.CloseOnAuthenticationExpiration = true;
         options.MinimumProtocolVersion = 0;

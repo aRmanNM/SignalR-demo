@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using IdentityModel.Client;
+using MessagePack;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,12 +10,65 @@ internal class Program
 {
     private static async Task Main(string[] args)
     {
-        string url = "http://localhost:5218/samplehub";
+        var header = args.Length >= 1 ? args[0] : "Client1";
+        AnsiConsole.Write(
+                    new FigletText(header)
+                        .LeftAligned());
+
+        bool authenticate = false;
+        bool asAdmin = false;
+
+        Console.Write("Do you want to authenticate? (y/n): ");
+        authenticate = Console.ReadLine()?.ToLower() == "y" ? true : false;
+
+        if (authenticate)
+        {
+            Console.Write("Authenticate as Admin (otherwise regular user)? (y/n): ");
+            asAdmin = Console.ReadLine()?.ToLower() == "y" ? true : false;
+        }
+
+        string token = string.Empty;
+
+        if (authenticate)
+        {
+            var client = new HttpClient();
+            var disco = await client.GetDiscoveryDocumentAsync("http://localhost:5000");
+            if (disco.IsError)
+            {
+                Console.WriteLine(disco.Error);
+                Console.WriteLine("Press any key to exit ...");
+                Console.ReadKey();
+                return;
+            }
+
+            var tokenResponse = await client.RequestPasswordTokenAsync(new PasswordTokenRequest
+            {
+                Address = disco.TokenEndpoint,
+                ClientId = "signalR-client",
+                ClientSecret = "secret",
+                UserName = asAdmin ? "admin1" : "user1",
+                Password = "P@ssw0rd"
+            });
+
+            if (tokenResponse.IsError)
+            {
+                Console.WriteLine(tokenResponse.Error);
+                Console.WriteLine("Press any key to exit ...");
+                Console.ReadKey();
+                return;
+            }
+
+            token = tokenResponse.AccessToken;
+        }
+
+        //
+        // strart hub
 
         var hubConnection = new HubConnectionBuilder()
-            .WithUrl(url, HttpTransportType.WebSockets, options =>
+            .WithUrl("http://localhost:5218/samplehub", HttpTransportType.WebSockets, options =>
             {
-                // client options here
+                if (!string.IsNullOrEmpty(token))
+                    options.AccessTokenProvider = () => Task.FromResult<string?>(token);
             })
             .ConfigureLogging(logging =>
             {
@@ -33,20 +87,16 @@ internal class Program
             .Build();
 
         hubConnection.On<string>("ReceiveMessage",
-            message => Console.WriteLine("SampleHub message is: {0}", message));
+            message => Console.WriteLine("\n ----- \nSampleHub message is: {0}\n ----- \n", message));
+
+        await hubConnection.StartAsync();
 
         try
         {
-            await hubConnection.StartAsync();
-
             while (true)
             {
                 var message = string.Empty;
                 var groupName = string.Empty;
-
-                AnsiConsole.Write(
-                    new FigletText(args[0])
-                        .LeftAligned());
 
                 Console.WriteLine("Specify action:");
                 Console.WriteLine("0 - broadcast to all");
@@ -56,7 +106,9 @@ internal class Program
                 Console.WriteLine("4 - send to a group");
                 Console.WriteLine("5 - add user to a group");
                 Console.WriteLine("6 - remove user from a group");
-                Console.WriteLine("7 - send to self (throw exception)");
+                Console.WriteLine("7 - send to self (throws exception)");
+                Console.WriteLine("8 - send to self (requires authenticated user)");
+                Console.WriteLine("9 - send to self (requires authenticated user with admin role)");
                 Console.WriteLine("exit - Exit the program");
 
                 var action = Console.ReadLine();
@@ -104,6 +156,12 @@ internal class Program
                     case "7":
                         // server exceptions didn't received on client using SendAsync method!
                         await hubConnection.InvokeAsync("SendToCallerWithException");
+                        break;
+                    case "8":
+                        await hubConnection.InvokeAsync("SendToCallerIfAuthenticated", message);
+                        break;
+                    case "9":
+                        await hubConnection.InvokeAsync("SendToCallerIfAuthenticatedWithAdminRole", message);
                         break;
                     default:
                         Console.WriteLine("Invalid action specified");
