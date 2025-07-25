@@ -10,11 +10,6 @@ internal class Program
 {
     private static async Task Main(string[] args)
     {
-        var header = args.Length >= 1 ? args[0] : "Client1";
-        AnsiConsole.Write(
-                    new FigletText(header)
-                        .LeftAligned());
-
         bool authenticate = false;
         bool asAdmin = false;
 
@@ -95,8 +90,16 @@ internal class Program
         {
             while (true)
             {
+                Console.Clear();
+
+                var header = args.Length >= 1 ? args[0] : "Client1";
+                AnsiConsole.Write(new FigletText(header).LeftAligned());
+
                 var message = string.Empty;
                 var groupName = string.Empty;
+
+                Console.WriteLine($"ConnectionId: {hubConnection.ConnectionId}");
+                Console.WriteLine($"----------");
 
                 Console.WriteLine("Specify action:");
                 Console.WriteLine("0 - broadcast to all");
@@ -111,6 +114,7 @@ internal class Program
                 Console.WriteLine("9 - send to self (requires authenticated user with admin role)");
                 Console.WriteLine("exit - Exit the program");
 
+                Console.Write("> ");
                 var action = Console.ReadLine();
 
                 if (action == "exit")

@@ -9,6 +9,7 @@ using IdentityModel;
 using IdentityModel.Client;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.Authentication;
+using Spectre.Console;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -159,5 +160,8 @@ app.UseEndpoints(endpoints =>
             $"Authorization data items: {options.AuthorizationData.Count}");
     });
 });
+
+Console.Clear();
+AnsiConsole.Write(new FigletText("Server").LeftAligned());
 
 app.Run();
