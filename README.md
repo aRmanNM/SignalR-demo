@@ -1,3 +1,5 @@
+![tmux-view-of-all-projects-running-side-by-side](screenshot.jpg)
+
 this is based on a book i was reading about signalr by [Fiodar Sazanavets](https://github.com/fiodarsazanavets) called [SignalR on .NET 6 - the Complete Guide](https://www.google.com/search?client=firefox-b-d&q=SignalR+on+.NET+6+-+the+Complete+Guide+Fiodar+Sazanavets)
 
 solution contains 3 projects:
